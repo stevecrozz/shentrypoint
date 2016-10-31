@@ -1,0 +1,133 @@
+#! /bin/bash
+
+child=1
+
+_handle_term() {
+  echo "./bin/entrypoint Caught SIGTERM, forwarding to pid $child"
+  kill -TERM "$child" 2>/dev/null
+}
+
+_handle_usr2() {
+  echo "./bin/entrypoint Caught SIGUSR2, forwarding to pid $child"
+  kill -USR2 "$child" 2>/dev/null
+}
+
+_handle_quit() {
+  echo "./bin/entrypoint Caught SIGQUIT, forwarding to pid $child"
+  kill -QUIT "$child" 2>/dev/null
+}
+
+_handle_int() {
+  exec_after_terminate=bash
+  echo "./bin/entrypoint Caught SIGINT, forwarding to pid $child"
+  kill -INT "$child" 2>/dev/null
+}
+
+trap _handle_term SIGTERM
+trap _handle_quit SIGQUIT
+trap _handle_usr2 SIGUSR2
+trap _handle_int SIGINT
+
+wrap() {
+  declare desc="Proxy signals to the child process. Invoke shell on SIGINT"
+  echo "Starting the child process, watching for SIGINT"
+
+  echo "\$ $@ &"
+  $@ &
+  child=$!
+
+  echo "Child process started has pid $child"
+  wait $child
+  echo "Child process $child exited with status $?"
+
+  if [ -n "$exec_after_terminate" ]
+  then
+    echo "Running exec_after_terminate: '$exec_after_terminate'"
+    exec $exec_after_terminate
+  fi
+}
+
+# Borrowed from https://github.com/gliderlabs/herokuish
+yaml-esque-get() {
+  declare desc="Get key value from colon-separated structure"
+  declare key="$1"
+  local inputkey
+  local cmd
+  while read line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^#.* ]] && continue
+    inputkey=${line%%:*}
+    cmd=${line#*:}
+    [[ "$inputkey" == "$key" ]] && echo "$cmd"
+  done <<< "$(cat)"
+}
+
+procfile-parse() {
+  declare desc="Get command string for a process type from Procfile"
+  declare type="$1"
+  cat "Procfile" | yaml-esque-get "$type"
+}
+
+get-command() {
+  declare desc="Get the command mapping for a command word"
+  declare type="$1"
+
+  word="$(procfile-parse "$1")"
+
+  if [ -z "$word" ]
+  then cmd="$1"
+  else cmd="$word"
+  fi
+
+  echo "$cmd"
+}
+
+run-commands() {
+  declare desc="Run command words"
+  declare type="$1"
+
+  set-log-location
+
+  if [ "$(eval echo $(get-command "$1"))" = "$1" ]; then
+    # if the first command is the same as the first argument, then the command
+    # was not found (or it was identical to the command)
+    echo "entrypoint: Command word '$1' not found, running the whole string '$@' as a single command"
+
+    cmd="$CMD_PREFIX$(eval echo $@)"
+    exec $cmd
+  else
+    # loop through the command words and handle appropriately
+    until [ -z "$1" ]
+    do
+      cmd="$CMD_PREFIX$(eval echo $(get-command "$1"))"
+
+      if [ "$#" -gt "1" ]; then
+        echo "Only one command word at a time"
+        exit 1
+      else
+        echo "entrypoint: Command word is '"$1"', running '$cmd'"
+
+        if [ "$$" = "1" ]
+        then
+          wrap "$cmd"
+        else
+          exec $cmd
+        fi
+      fi
+
+      shift
+    done
+  fi
+}
+
+main() {
+  declare desc="Kick off the entrypoint script"
+  declare type="$@"
+
+  if [ $# -eq 0 ]; then
+    echo "entrypoint: No command words specified. Exiting"
+  else
+    run-commands "$@"
+  fi
+}
+
+main "$@"
