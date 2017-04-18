@@ -38,6 +38,7 @@ wrap() {
 
   echo "Child process started has pid $child"
   wait $child
+  wait $child
   echo "Child process $child exited with status $?"
 
   if [ -n "$exec_after_terminate" ]
