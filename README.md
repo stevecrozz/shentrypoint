@@ -13,6 +13,19 @@ it doesn't aim to be a full init process.
 4. When you send SIGINT (CTRL+C) to your container, you should get a shell
    prompt (not a stopped container) as if you'd been running your application
    process in the foreground from a shell all along
+   
+## Why?
+
+We put together a lot of automation around running containers in terms
+of configuration for inputs, network, volumes, etc, not to mention
+connecting these containers to other systems in a deployment. Sometimes,
+the easiest way to get a debugging environment is to take over an
+existing container. Shentrypoint makes it possible to `docker attach` to
+an existing container and you can pretend you had launched the
+application as a foreground process all along. You can hit CTRL+C,
+modify your container's filesystem, run arbitrary commands, restart your
+application and debug it interactively.
+
 
 ## How to Use It
 
