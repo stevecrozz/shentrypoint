@@ -86,8 +86,6 @@ run-commands() {
   declare desc="Run command words"
   declare type="$1"
 
-  set-log-location
-
   if [ "$(eval echo $(get-command "$1"))" = "$1" ]; then
     # if the first command is the same as the first argument, then the command
     # was not found (or it was identical to the command)
